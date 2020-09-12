@@ -30,6 +30,7 @@ Thoughts on improving for an actual production service
 - Add a custom HTTP client with logging, auth, etc
 - Add a max # of retries for a single page
 - Ability to save into a custom folder instead of working directory
+- Use Regex to parse out all punctuation from names and addresses
 */
 
 func main() {
@@ -77,7 +78,9 @@ func createFileName(h House) string {
 	id := h.ID
 	urlSplit := strings.Split(h.PhotoURL, ".")
 	ext := urlSplit[len(urlSplit)-1]
-	name := strings.ReplaceAll(h.Homeowner, " ", "-")
+	name := strings.ReplaceAll(h.Homeowner, "'", "")
+	name = strings.ReplaceAll(name, " ", "-")
+	name = strings.ToUpper(name)
 	address := strings.ReplaceAll(h.Address, ",", "")
 	address = strings.ReplaceAll(address, ".", "")
 	address = strings.ReplaceAll(address, " ", "-")
