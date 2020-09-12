@@ -7,10 +7,12 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 )
 
+// API holds the client & base URL for the API
 type API struct {
 	Client  *http.Client
 	BaseURL string
@@ -36,7 +38,6 @@ Thoughts on improving for an actual production service
 - Add a max # of retries for a single page
 - Add all House structs to one Houses - could possibly run faster than the existing loop,
 would need to benchmark & understand use case
-- Ability to save into a custom folder instead of working directory
 - Use Regex to parse out all punctuation from names and addresses
 - Use go modules for dependencies...I ran into issues with the go installation on my personal computer not recognizing external packages,
 so for the sake of time I'm using just the default packages. I usually use testify/require for testing.
@@ -53,7 +54,7 @@ func main() {
 	for i := 0; i < 10; i++ {
 		houses, err := client.getHouses(i + 1)
 		// while error returns, try again
-		// getHouses will error if a non-200 is returned
+		// getHouses will return an error if a non-200 is returned from the API
 		for err != nil {
 			fmt.Printf("trying again for page %d \n", i+1)
 			houses, err = client.getHouses(i + 1)
@@ -70,8 +71,11 @@ func main() {
 	for _, h := range houseList {
 		for _, hr := range h.Houses {
 			go func(h House) {
-				fileName := createFileName(h)
-				err := downloadFile("photos", fileName, h.PhotoURL)
+				fileName, err := createFileName(h)
+				if err != nil {
+					fmt.Println(err)
+				}
+				err = downloadFile("photos", fileName, h.PhotoURL)
 				if err != nil {
 					fmt.Println(err)
 				}
@@ -86,19 +90,27 @@ func main() {
 
 }
 
-func createFileName(h House) string {
+func createFileName(h House) (string, error) {
 	//Format: id-[NNN]-[address].[ext]
 	id := h.ID
 	urlSplit := strings.Split(h.PhotoURL, ".")
 	ext := urlSplit[len(urlSplit)-1]
-	name := strings.ReplaceAll(h.Homeowner, "'", "")
-	name = strings.ReplaceAll(name, " ", "-")
-	name = strings.ToUpper(name)
-	address := strings.ReplaceAll(h.Address, ",", "")
-	address = strings.ReplaceAll(address, ".", "")
+
+	// Regex to match only strings, integers, and spaces
+	reg, err := regexp.Compile("[^a-zA-Z0-9 ]+")
+	if err != nil {
+		return "", fmt.Errorf("Unable to compile regex: %w", err)
+	}
+
+	// Use regex to remove all punctuation from address & name fields
+	address := reg.ReplaceAllString(h.Address, "")
 	address = strings.ReplaceAll(address, " ", "-")
 
-	return fmt.Sprintf("%d-%s-%s.%s", id, name, address, ext)
+	name := reg.ReplaceAllString(h.Homeowner, "")
+	name = strings.ReplaceAll(name, " ", "-")
+	name = strings.ToUpper(name)
+
+	return fmt.Sprintf("%d-%s-%s.%s", id, name, address, ext), nil
 
 }
 
@@ -109,17 +121,21 @@ func downloadFile(directory string, fileName string, url string) error {
 	}
 	defer resp.Body.Close()
 
+	// Create directory if not exists
 	if _, err := os.Stat(directory); os.IsNotExist(err) {
 		os.Mkdir(directory, 0755)
 	}
 	if err != nil {
 		return fmt.Errorf("creating photo directory: %w", err)
 	}
+	// Creating file at given path
 	file, err := os.Create(fmt.Sprintf("%s/%s", directory, fileName))
 	if err != nil {
 		return fmt.Errorf("creating new file: %w", err)
 	}
 	defer file.Close()
+
+	// Copying contents to file path
 	_, err = io.Copy(file, resp.Body)
 	if err != nil {
 		return fmt.Errorf("copying file: %w", err)
@@ -135,6 +151,7 @@ func (api API) getHouses(page int) (Houses, error) {
 	if err != nil {
 		return Houses{}, fmt.Errorf("creating request: %w", err)
 	}
+	// Executing request
 	resp, err := api.Client.Do(req)
 	if err != nil {
 		return Houses{}, fmt.Errorf("getting houses: %w", err)

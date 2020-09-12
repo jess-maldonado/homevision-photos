@@ -233,7 +233,10 @@ func TestCreateFileName(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			fileName := createFileName(tc.house)
+			fileName, err := createFileName(tc.house)
+			if err != nil {
+				t.Error(err)
+			}
 			if fileName != tc.expected {
 				t.Errorf("names did not match, got: %s, wanted: %s", fileName, tc.expected)
 			}
