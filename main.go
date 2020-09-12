@@ -11,13 +11,6 @@ import (
 	"sync"
 )
 
-// Get response from API DONE
-// Unmarshal into House Struct DONE
-// create file name from address & url DONE
-// save file DONE
-// concurrency in saving file DONE
-// deal with flaky responses DONE
-
 // Houses is a slice of house structs
 type Houses struct {
 	Houses []House `json:"houses"`
@@ -31,6 +24,13 @@ type House struct {
 	Price     int    `json:"price"`
 	PhotoURL  string `json:"photoURL`
 }
+
+/*
+Thoughts on improving for an actual production service
+- Add a custom HTTP client with logging, auth, etc
+- Add a max # of retries for a single page
+- Ability to save into a custom folder instead of working directory
+*/
 
 func main() {
 	baseURL := "http://app-homevision-staging.herokuapp.com/api_project/houses?page=%d"
