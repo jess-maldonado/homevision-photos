@@ -11,6 +11,13 @@ import (
 	"sync"
 )
 
+// Get response from API DONE
+// Unmarshal into House Struct DONE
+// create file name from address & url DONE
+// save file DONE
+// concurrency in saving file DONE
+// deal with flaky responses DONE
+
 // Houses is a slice of house structs
 type Houses struct {
 	Houses []House `json:"houses"`
@@ -29,42 +36,44 @@ func main() {
 	baseURL := "http://app-homevision-staging.herokuapp.com/api_project/houses?page=%d"
 	var houseList []Houses
 
-	for i := 0; i < 3; i++ {
+	// Getting all of the houses
+	for i := 0; i < 10; i++ {
 		houses, err := getHouses(fmt.Sprintf(baseURL, i+1))
-		if err != nil {
-			fmt.Println(err)
-		} else {
-			houseList = append(houseList, houses)
+		// while error returns, try again
+		// getHouses will error if a non-200 is returned
+		for err != nil {
+			fmt.Printf("trying again for page %d \n", i+1)
+			houses, err = getHouses(fmt.Sprintf(baseURL, i+1))
 		}
+		houseList = append(houseList, houses)
 	}
 
+	// Using a waitgroup & goroutines to take advantage of concurrency in saving files
+	// WG is houseList * 10 because each page unmarshals to a Houses struct with [10]House
+	// Just using len(houseList) will make the waitgroup finish before everything is saved
 	var wg sync.WaitGroup
-	fmt.Println(len(houseList))
-	wg.Add(len(houseList))
+	wg.Add(len(houseList) * 10)
 	// Creating file name
 	for _, h := range houseList {
 		for _, hr := range h.Houses {
-			go downloadFile(hr)
+			go func(h House) {
+				err := downloadPhoto(h)
+				if err != nil {
+					fmt.Println(err)
+				}
+				defer wg.Done()
+			}(hr)
 		}
 	}
 	wg.Wait()
+	fmt.Println("All houses saved successfully.")
 
 	return
 
 }
 
-// err := json.Unmarshal(resp.Body, &house)
-// houses = append(houses, house)
-
-// Get response from API
-// Unmarshal into House Struct
-// create file name from address & url
-// save file
-// concurrency in saving file
-// deal with flaky responses
-
 func createFileName(h House) string {
-	//id-[NNN]-[address].[ext]
+	//Format: id-[NNN]-[address].[ext]
 	id := h.ID
 	urlSplit := strings.Split(h.PhotoURL, ".")
 	ext := urlSplit[len(urlSplit)-1]
@@ -95,7 +104,7 @@ func saveFile(fileName string, url string) error {
 	return nil
 }
 
-func downloadFile(h House) error {
+func downloadPhoto(h House) error {
 	fileName := createFileName(h)
 	err := saveFile(fileName, h.PhotoURL)
 	if err != nil {
@@ -109,6 +118,9 @@ func getHouses(url string) (Houses, error) {
 	resp, err := http.Get(fmt.Sprintf(url))
 	if err != nil {
 		return Houses{}, fmt.Errorf("getting houses: %w", err)
+	}
+	if resp.StatusCode != 200 {
+		return Houses{}, fmt.Errorf("status code: %d", resp.StatusCode)
 	}
 	defer resp.Body.Close()
 
