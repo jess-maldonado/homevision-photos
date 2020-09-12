@@ -11,6 +11,11 @@ import (
 	"sync"
 )
 
+type API struct {
+	Client  *http.Client
+	BaseURL string
+}
+
 // Houses is a slice of house structs
 type Houses struct {
 	Houses []House `json:"houses"`
@@ -29,22 +34,29 @@ type House struct {
 Thoughts on improving for an actual production service
 - Add a custom HTTP client with logging, auth, etc
 - Add a max # of retries for a single page
+- Add all House structs to one Houses - could possibly run faster than the existing loop,
+would need to benchmark & understand use case
 - Ability to save into a custom folder instead of working directory
 - Use Regex to parse out all punctuation from names and addresses
+- Use go modules for dependencies...I ran into issues with the go installation on my personal computer not recognizing external packages,
+so for the sake of time I'm using just the default packages. I usually use testify/require for testing.
 */
 
 func main() {
-	baseURL := "http://app-homevision-staging.herokuapp.com/api_project/houses?page=%d"
+	client := API{
+		Client:  &http.Client{},
+		BaseURL: "http://app-homevision-staging.herokuapp.com/api_project/houses?page=%d",
+	}
 	var houseList []Houses
 
 	// Getting all of the houses
 	for i := 0; i < 10; i++ {
-		houses, err := getHouses(fmt.Sprintf(baseURL, i+1))
+		houses, err := client.getHouses(i + 1)
 		// while error returns, try again
 		// getHouses will error if a non-200 is returned
 		for err != nil {
 			fmt.Printf("trying again for page %d \n", i+1)
-			houses, err = getHouses(fmt.Sprintf(baseURL, i+1))
+			houses, err = client.getHouses(i + 1)
 		}
 		houseList = append(houseList, houses)
 	}
@@ -58,7 +70,8 @@ func main() {
 	for _, h := range houseList {
 		for _, hr := range h.Houses {
 			go func(h House) {
-				err := downloadPhoto(h)
+				fileName := createFileName(h)
+				err := downloadFile("photos", fileName, h.PhotoURL)
 				if err != nil {
 					fmt.Println(err)
 				}
@@ -89,13 +102,20 @@ func createFileName(h House) string {
 
 }
 
-func saveFile(fileName string, url string) error {
+func downloadFile(directory string, fileName string, url string) error {
 	resp, err := http.Get(url)
 	if err != nil {
 		return fmt.Errorf("getting file contents: %w", err)
 	}
 	defer resp.Body.Close()
-	file, err := os.Create(fileName)
+
+	if _, err := os.Stat(directory); os.IsNotExist(err) {
+		os.Mkdir(directory, 0755)
+	}
+	if err != nil {
+		return fmt.Errorf("creating photo directory: %w", err)
+	}
+	file, err := os.Create(fmt.Sprintf("%s/%s", directory, fileName))
 	if err != nil {
 		return fmt.Errorf("creating new file: %w", err)
 	}
@@ -107,22 +127,20 @@ func saveFile(fileName string, url string) error {
 	return nil
 }
 
-func downloadPhoto(h House) error {
-	fileName := createFileName(h)
-	err := saveFile(fileName, h.PhotoURL)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func getHouses(url string) (Houses, error) {
+func (api API) getHouses(page int) (Houses, error) {
 	var houses Houses
-	resp, err := http.Get(fmt.Sprintf(url))
+
+	// Creating request
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf(api.BaseURL, page), nil)
+	if err != nil {
+		return Houses{}, fmt.Errorf("creating request: %w", err)
+	}
+	resp, err := api.Client.Do(req)
 	if err != nil {
 		return Houses{}, fmt.Errorf("getting houses: %w", err)
 	}
-	if resp.StatusCode != 200 {
+	// If status code not 200, return error
+	if resp.StatusCode != http.StatusOK {
 		return Houses{}, fmt.Errorf("status code: %d", resp.StatusCode)
 	}
 	defer resp.Body.Close()
