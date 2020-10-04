@@ -14,7 +14,7 @@ import (
 func apiResponseStub(response string, status int) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if status != http.StatusOK {
-			http.Error(w, "service available", http.StatusNotFound)
+			http.Error(w, "service unavailable", http.StatusNotFound)
 			return
 		}
 		w.Write([]byte(response))
@@ -142,6 +142,8 @@ func TestDownloadFile(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			tempDir, err := ioutil.TempDir("", tc.directory)
 			filePath := fmt.Sprintf("%s/%s", tempDir, tc.fileName)
+			defer os.Remove(filePath)
+			defer os.Remove(tempDir)
 
 			if err != nil && tc.desc != "INVALID_DIRECTORY" {
 				t.Errorf("Unable to get temp directory: %w", err)
@@ -157,10 +159,6 @@ func TestDownloadFile(t *testing.T) {
 					t.Errorf("Expected to find saved file: %w", err)
 				}
 			}
-
-			defer os.Remove(filePath)
-			defer os.Remove(tempDir)
-
 		})
 	}
 }

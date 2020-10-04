@@ -35,10 +35,10 @@ type House struct {
 /*
 Thoughts on improving for an actual production service
 - Add a custom HTTP client with logging, auth, etc
-- Add a max # of retries for a single page
+- Use env variables for url
+- Add a max # of retries for a single page or timeout between retries
 - Add all House structs to one Houses - could possibly run faster than the existing loop,
-would need to benchmark & understand use case
-- Use Regex to parse out all punctuation from names and addresses
+would need to benchmark & understand use case (** I created a benchmark test, it is faster, in benchmark branch)
 - Use go modules for dependencies...I ran into issues with the go installation on my personal computer not recognizing external packages,
 so for the sake of time I'm using just the default packages. I usually use testify/require for testing.
 */
@@ -65,6 +65,7 @@ func main() {
 	// Using a waitgroup & goroutines to take advantage of concurrency in saving files
 	// WG is houseList * 10 because each page unmarshals to a Houses struct with [10]House
 	// Just using len(houseList) will make the waitgroup finish before everything is saved
+	// (this is faster if all house structs are in a single Houses struct)
 	var wg sync.WaitGroup
 	wg.Add(len(houseList) * 10)
 	// Creating file name
