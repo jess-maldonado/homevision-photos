@@ -71,6 +71,7 @@ func main() {
 	// Creating file name
 	for _, h := range houseList {
 		for _, hr := range h.Houses {
+			// wg.Add(1) should go here instead for cases when we don't know how many there are
 			go func(h House) {
 				fileName, err := createFileName(h)
 				if err != nil {
